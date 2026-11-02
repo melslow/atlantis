@@ -23,7 +23,7 @@ type planTypeStepRunnerDelegate struct {
 	remotePlanRunner Runner
 }
 
-func (p *planTypeStepRunnerDelegate) isRemotePlan(planFile string) (bool, error) {
+func isRemotePlanFile(planFile string) (bool, error) {
 	data, err := os.ReadFile(planFile)
 
 	if err != nil {
@@ -35,7 +35,7 @@ func (p *planTypeStepRunnerDelegate) isRemotePlan(planFile string) (bool, error)
 
 func (p *planTypeStepRunnerDelegate) Run(ctx command.ProjectContext, extraArgs []string, path string, envs map[string]string) (string, error) {
 	planFile := GetPlanFilePath(ctx, path)
-	remotePlan, err := p.isRemotePlan(planFile)
+	remotePlan, err := isRemotePlanFile(planFile)
 
 	if err != nil {
 		return "", err

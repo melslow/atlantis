@@ -2018,6 +2018,8 @@ func newProjectDriftFromResult(pr command.ProjectResult, ref, baseBranch, resolv
 	} else if pr.PlanSuccess != nil {
 		projectDrift.Drift = models.NewDriftSummaryFromPlanSuccess(pr.PlanSuccess)
 		projectDrift.PlanOutput = pr.PlanSuccess.TerraformOutput
+		projectDrift.PlanJSON = pr.PlanSuccess.PlanJSON
+		projectDrift.PlanJSONError = pr.PlanSuccess.PlanJSONError
 	}
 
 	return projectDrift
@@ -2188,6 +2190,7 @@ func (a *APIController) DetectDrift(w http.ResponseWriter, r *http.Request) {
 		FailOnTeamAllowlistDenied: true,
 		ExactProjectNameMatching:  true,
 		SortByExecutionOrder:      true,
+		IncludePlanJSON:           request.IncludePlanJSON,
 	}
 
 	// Setup working directory
@@ -2229,7 +2232,7 @@ func (a *APIController) DetectDrift(w http.ResponseWriter, r *http.Request) {
 	projectDrifts := driftProjectsFromCommandResult(result, normalizedRef, normalizedBaseBranch, ctx.Pull.HeadCommit, detectionResult.ID)
 	for _, projectDrift := range projectDrifts {
 		detectedProjects[newDriftProjectIdentity(projectDrift)] = struct{}{}
-		// PlanOutput is only ever returned in the immediate detect response;
+		// Plan output is only ever returned in the immediate detect response;
 		// Store strips it before persisting, so it is never persisted.
 		if err := a.DriftStorage.Store(baseRepo.ID(), projectDrift); err != nil {
 			storeFailed = true
@@ -2255,7 +2258,7 @@ func (a *APIController) DetectDrift(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert to API DTO and return
-	apiResult := NewDriftDetectionResultAPI(detectionResult, request.IncludePlanOutput)
+	apiResult := NewDriftDetectionResultAPI(detectionResult, request.IncludePlanOutput, request.IncludePlanJSON)
 
 	code := http.StatusOK
 	if driftDetectionHasErrors(detectionResult) {

@@ -619,6 +619,7 @@ When [drift webhooks](sending-notifications-via-webhooks.md#drift-detection-webh
 | projects             | []string             | No          | List of project names to check. If empty, all are checked                            |
 | paths                | []DriftDetectionPath | No          | List of paths to check. If empty, project names are used                             |
 | include_plan_output  | boolean              | No          | If true, include `plan_output` for each project in the response. Defaults to `false` |
+| include_plan_json    | boolean              | No          | If true, generate and include the full Terraform JSON plan for each successful project plan. Defaults to `false` |
 
 #### DriftDetectionPath
 
@@ -684,6 +685,35 @@ Set `include_plan_output: true` on the request to have the response include `pla
 
 ::: warning Plan Output May Contain Sensitive Data
 Before this field existed, `POST /api/drift/detect` only returned numeric drift counts. With `include_plan_output: true`, responses can include resource attribute values and, for custom `run`-step workflows, arbitrary command output. The endpoint's auth boundary is unchanged (the same API token as other drift/remediation endpoints), so this is not a new authorization gap, but the data sensitivity of the response changes materially when this field is enabled. Only `run`-step filter-regex redaction (if configured) applies to plan output; it is not otherwise scrubbed.
+:::
+
+#### Optional JSON Plan
+
+Set `include_plan_json: true` to receive the full `terraform show -json <planfile>` result as a JSON object in each project's `plan_json` field. This flag is independent of `include_plan_output`: request either format or both. It defaults to `false`; when omitted or `false`, Atlantis does not run an additional command or include `plan_json` or `plan_json_error`.
+
+```bash
+curl --request POST 'https://<ATLANTIS_HOST_NAME>/api/drift/detect' \
+--header 'X-Atlantis-Token: <ATLANTIS_API_SECRET>' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "repository": "org/repo",
+    "ref": "main",
+    "type": "Github",
+    "projects": ["my-project"],
+    "include_plan_json": true
+}'
+```
+
+For every successful project plan, including a plan with no changes, Atlantis runs a fresh `show -json` using the project's Terraform/OpenTofu version, workspace, working directory, and workflow environment. Capture runs while the project execution and checkout read locks are still held. It does not reuse JSON from an existing workflow `show` step, so opting in adds one command per successful project plan and can substantially increase response size, memory usage, and request duration.
+
+JSON capture requires Terraform 0.12 or later (or OpenTofu) and a compatible local saved plan at Atlantis's expected plan-file path. Custom workflows are supported when they produce that artifact. Remote operations without a local saved plan, custom workflows that do not save one at that path, command errors, or invalid JSON can prevent capture.
+
+If a project plan succeeds but JSON capture fails, its drift summary and successful plan result are preserved. Atlantis omits `plan_json` and returns a per-project `plan_json_error` explaining why. A JSON capture error alone does not change the HTTP success status, drift error counts, or webhook delivery. If planning itself fails, neither JSON field is returned for that project.
+
+Both `plan_json` and `plan_json_error` are exclusive to the immediate detect response. They are never stored in drift status or included in drift webhooks. Capture does not write an additional JSON file or publish the JSON to the normal job output stream.
+
+::: warning JSON Plans Contain Unredacted Sensitive Values
+The full Terraform JSON plan can contain sensitive values that Terraform hides in human-readable output, as well as configuration, prior state, and planned values. It is not redacted by Atlantis, including any configured custom `run`-step output filters. Request it only when needed, protect the API token and response, and avoid logging or retaining the response in downstream systems unless those systems are authorized to handle these values.
 :::
 
 #### Sample Response (Success)

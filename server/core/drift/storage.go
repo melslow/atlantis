@@ -17,7 +17,7 @@ import (
 //go:generate go tool pegomock generate --package mocks -o mocks/mock_drift_storage.go Storage
 type Storage interface {
 	// Store saves a drift result for a project. Implementations must strip
-	// PlanOutput before persisting — it is transient and is never stored.
+	// PlanOutput, PlanJSON, and PlanJSONError before persisting; they are transient.
 	Store(repository string, drift models.ProjectDrift) error
 
 	// Get retrieves drift results for a repository.
@@ -97,13 +97,15 @@ func NewInMemoryStorage() *InMemoryStorage {
 	}
 }
 
-// Store saves a drift result for a project, stripping PlanOutput per the
+// Store saves a drift result for a project, stripping transient plan output per the
 // Storage interface contract.
 func (s *InMemoryStorage) Store(repository string, drift models.ProjectDrift) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	drift.PlanOutput = ""
+	drift.PlanJSON = nil
+	drift.PlanJSONError = ""
 
 	if s.data[repository] == nil {
 		s.data[repository] = make(map[driftCacheKey]models.ProjectDrift)

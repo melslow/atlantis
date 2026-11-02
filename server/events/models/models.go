@@ -10,6 +10,7 @@ package models
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -431,6 +432,10 @@ func SplitRepoFullName(repoFullName string) (owner string, repo string) {
 type PlanSuccess struct {
 	// TerraformOutput is the output from Terraform of running plan.
 	TerraformOutput string
+	// PlanJSON and PlanJSONError are transient, opt-in drift detection output.
+	// Only the immediate detect response may expose them.
+	PlanJSON      json.RawMessage `json:"-"`
+	PlanJSONError string          `json:"-"`
 	// LockURL is the full URL to the lock held by this plan.
 	LockURL string
 	// RePlanCmd is the command that users should run to re-plan this project.

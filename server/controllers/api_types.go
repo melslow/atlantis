@@ -4,6 +4,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/runatlantis/atlantis/server/events/command"
@@ -168,6 +169,10 @@ type DriftProjectAPI struct {
 	// drift storage, so it is unavailable when a status response is built
 	// from stored records.
 	PlanOutput string `json:"plan_output,omitempty"`
+	// PlanJSON is the full Terraform JSON plan, only on opted-in detect responses.
+	PlanJSON json.RawMessage `json:"plan_json,omitempty"`
+	// PlanJSONError explains a JSON capture failure without failing the plan.
+	PlanJSONError string `json:"plan_json_error,omitempty"`
 	// LastChecked is when drift was last checked.
 	LastChecked time.Time `json:"last_checked"`
 	// Error contains any error message if detection failed.
@@ -195,9 +200,8 @@ type DriftDetailsAPI struct {
 }
 
 // NewDriftProjectAPI converts an internal ProjectDrift to its API representation.
-// PlanOutput is never copied here since it is transient and not persisted in
-// drift storage; callers that want it on the immediate detect response set
-// result.PlanOutput explicitly after calling this function.
+// Transient plan output is never copied here. The immediate detect response
+// explicitly opts in to these fields after calling this function.
 func NewDriftProjectAPI(pd models.ProjectDrift) DriftProjectAPI {
 	result := DriftProjectAPI{
 		ProjectName:    pd.ProjectName,
@@ -296,9 +300,8 @@ type DriftDetectionResultAPI struct {
 }
 
 // NewDriftDetectionResultAPI converts an internal DriftDetectionResult to its API representation.
-// includePlanOutput controls whether plan_output is included for each project;
-// callers should pass the request's IncludePlanOutput flag.
-func NewDriftDetectionResultAPI(dr *models.DriftDetectionResult, includePlanOutput bool) DriftDetectionResultAPI {
+// The include flags independently control transient text and JSON plan output.
+func NewDriftDetectionResultAPI(dr *models.DriftDetectionResult, includePlanOutput, includePlanJSON bool) DriftDetectionResultAPI {
 	result := DriftDetectionResultAPI{
 		ID:         dr.ID,
 		Repository: dr.Repository,
@@ -311,6 +314,10 @@ func NewDriftDetectionResultAPI(dr *models.DriftDetectionResult, includePlanOutp
 		proj := NewDriftProjectAPI(p)
 		if includePlanOutput {
 			proj.PlanOutput = p.PlanOutput
+		}
+		if includePlanJSON {
+			proj.PlanJSON = p.PlanJSON
+			proj.PlanJSONError = p.PlanJSONError
 		}
 		result.Projects = append(result.Projects, proj)
 		if p.Error != "" {

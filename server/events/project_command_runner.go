@@ -331,6 +331,7 @@ type DefaultProjectCommandRunner struct {
 	InitStepRunner            StepRunner
 	PlanStepRunner            StepRunner
 	ShowStepRunner            StepRunner
+	PlanJSONStepRunner        StepRunner
 	ApplyStepRunner           StepRunner
 	CancelStepRunner          StepRunner
 	PolicyCheckStepRunner     StepRunner
@@ -603,7 +604,8 @@ func (p *DefaultProjectCommandRunner) doPolicyCheck(ctx command.ProjectContext) 
 	}
 
 	var failure string
-	outputs, err := p.runSteps(ctx.Steps, ctx, absPath)
+	stepResult, err := p.runSteps(ctx.Steps, ctx, absPath)
+	outputs := stepResult.outputs
 	var errs error
 	if err != nil {
 		for {
@@ -864,7 +866,8 @@ func (p *DefaultProjectCommandRunner) doPlan(ctx command.ProjectContext) (*model
 		return nil, failure, err
 	}
 
-	outputs, err := p.runSteps(ctx.Steps, ctx, projAbsPath)
+	stepResult, err := p.runSteps(ctx.Steps, ctx, projAbsPath)
+	outputs := stepResult.outputs
 
 	if err != nil {
 		if unlockErr := lockAttempt.UnlockFn(); unlockErr != nil {
@@ -876,6 +879,8 @@ func (p *DefaultProjectCommandRunner) doPlan(ctx command.ProjectContext) (*model
 	return &models.PlanSuccess{
 		LockURL:         p.LockURLGenerator.GenerateLockURL(lockAttempt.LockKey),
 		TerraformOutput: strings.Join(outputs, "\n"),
+		PlanJSON:        stepResult.planJSON,
+		PlanJSONError:   stepResult.planJSONError,
 		RePlanCmd:       ctx.RePlanCmd,
 		ApplyCmd:        ctx.ApplyCmd,
 		MergedAgain:     mergedAgain,
@@ -977,7 +982,8 @@ func (p *DefaultProjectCommandRunner) doApply(ctx command.ProjectContext) (apply
 	if _, ok := p.ApplyStepRunner.(*runtime.ApplyStepRunner); ok {
 		ctx.RemoteApplyRunURL = &remoteApplyRunURL
 	}
-	outputs, err := p.runSteps(ctx.Steps, ctx, absPath)
+	stepResult, err := p.runSteps(ctx.Steps, ctx, absPath)
+	outputs := stepResult.outputs
 	if err == nil {
 		err = ValidateNonPRAPIRefUnchanged(ctx, repoDir)
 	}
@@ -1029,7 +1035,8 @@ func (p *DefaultProjectCommandRunner) doVersion(ctx command.ProjectContext) (ver
 	}
 	defer unlockFn()
 
-	outputs, err := p.runSteps(ctx.Steps, ctx, absPath)
+	stepResult, err := p.runSteps(ctx.Steps, ctx, absPath)
+	outputs := stepResult.outputs
 	if err != nil {
 		return "", "", fmt.Errorf("%s\n%s", err, strings.Join(outputs, "\n"))
 	}
@@ -1073,7 +1080,8 @@ func (p *DefaultProjectCommandRunner) doImport(ctx command.ProjectContext) (out 
 	}
 	defer unlockFn()
 
-	outputs, err := p.runSteps(ctx.Steps, ctx, projAbsPath)
+	stepResult, err := p.runSteps(ctx.Steps, ctx, projAbsPath)
+	outputs := stepResult.outputs
 	if err != nil {
 		return nil, "", fmt.Errorf("%s\n%s", err, strings.Join(outputs, "\n"))
 	}
@@ -1117,7 +1125,8 @@ func (p *DefaultProjectCommandRunner) doStateRm(ctx command.ProjectContext) (out
 	}
 	defer unlockFn()
 
-	outputs, err := p.runSteps(ctx.Steps, ctx, projAbsPath)
+	stepResult, err := p.runSteps(ctx.Steps, ctx, projAbsPath)
+	outputs := stepResult.outputs
 	if err != nil {
 		return nil, "", fmt.Errorf("%s\n%s", err, strings.Join(outputs, "\n"))
 	}
@@ -1150,8 +1159,14 @@ func (p *DefaultProjectCommandRunner) ensurePlanLoaded(ctx command.ProjectContex
 	return nil
 }
 
-func (p *DefaultProjectCommandRunner) runSteps(steps []valid.Step, ctx command.ProjectContext, absPath string) ([]string, error) {
-	var outputs []string
+type projectStepResult struct {
+	outputs       []string
+	planJSON      json.RawMessage
+	planJSONError string
+}
+
+func (p *DefaultProjectCommandRunner) runSteps(steps []valid.Step, ctx command.ProjectContext, absPath string) (projectStepResult, error) {
+	var result projectStepResult
 
 	// Hold a read lock for the whole step run so clone/reset/merge cannot run in this dir until we're done.
 	unlock := p.WorkingDir.GitReadLock(ctx.Pull.BaseRepo, ctx.Pull, ctx.Workspace)
@@ -1172,11 +1187,11 @@ func (p *DefaultProjectCommandRunner) runSteps(steps []valid.Step, ctx command.P
 			out, err = p.PolicyCheckStepRunner.Run(ctx, step.ExtraArgs, absPath, envs)
 		case "apply":
 			if err = ValidateNonPRAPIRefUnchanged(ctx, absPath); err != nil {
-				return outputs, err
+				return result, err
 			}
 			if ctx.CommandName == command.Apply && p.ApplyPlanValidator != nil {
 				if err = p.ApplyPlanValidator.ValidateProjectPlan(ctx, absPath); err != nil {
-					return outputs, err
+					return result, err
 				}
 			}
 			out, err = p.ApplyStepRunner.Run(ctx, step.ExtraArgs, absPath, envs)
@@ -1201,13 +1216,25 @@ func (p *DefaultProjectCommandRunner) runSteps(steps []valid.Step, ctx command.P
 		// Keep all policy_check outputs for custom policy checks to maintain positional alignment with policy sets
 		// Empty outputs are still appended to prevent index mismatches
 		if out != "" || (step.StepName == "policy_check" && ctx.CustomPolicyCheck) {
-			outputs = append(outputs, out)
+			result.outputs = append(result.outputs, out)
 		}
 		if err != nil {
-			return outputs, err
+			return result, err
 		}
 	}
-	return outputs, nil
+	if ctx.CommandName == command.Plan && ctx.IncludePlanJSON {
+		if p.PlanJSONStepRunner == nil {
+			result.planJSONError = "plan JSON runner is not configured"
+		} else {
+			output, err := p.PlanJSONStepRunner.Run(ctx, nil, absPath, envs)
+			if err != nil {
+				result.planJSONError = err.Error()
+			} else {
+				result.planJSON = json.RawMessage(output)
+			}
+		}
+	}
+	return result, nil
 }
 
 // getMissingPolicySetNames returns the names of policy sets that don't have corresponding outputs

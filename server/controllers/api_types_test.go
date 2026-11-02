@@ -4,6 +4,8 @@
 package controllers_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/runatlantis/atlantis/server/controllers"
@@ -41,10 +43,23 @@ func TestNewDriftProjectAPI_IncludesForgetCount(t *testing.T) {
 
 func TestNewDriftProjectAPI_NeverCopiesPlanOutput(t *testing.T) {
 	pd := models.ProjectDrift{
-		Drift:      models.DriftSummary{HasDrift: true},
-		PlanOutput: "Terraform will perform the following actions...",
+		Drift:         models.DriftSummary{HasDrift: true},
+		PlanOutput:    "Terraform will perform the following actions...",
+		PlanJSON:      json.RawMessage(`{"secret":"transient-json-value"}`),
+		PlanJSONError: "transient-json-error",
 	}
 
 	result := controllers.NewDriftProjectAPI(pd)
 	Equals(t, "", result.PlanOutput)
+	Equals(t, 0, len(result.PlanJSON))
+	Equals(t, "", result.PlanJSONError)
+
+	for _, value := range []any{pd, result, models.PlanSuccess{
+		PlanJSON:      pd.PlanJSON,
+		PlanJSONError: pd.PlanJSONError,
+	}} {
+		encoded, err := json.Marshal(value)
+		Ok(t, err)
+		Assert(t, !strings.Contains(string(encoded), "transient-json"), "transient JSON must not be serialized implicitly")
+	}
 }

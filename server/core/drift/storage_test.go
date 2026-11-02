@@ -4,6 +4,7 @@
 package drift_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -49,8 +50,10 @@ func TestInMemoryStorage_StoreStripsPlanOutput(t *testing.T) {
 			HasDrift: true,
 			ToAdd:    2,
 		},
-		PlanOutput:  "Terraform will perform the following actions:\n  # aws_vpc.main will be updated in-place",
-		LastChecked: time.Now(),
+		PlanOutput:    "Terraform will perform the following actions:\n  # aws_vpc.main will be updated in-place",
+		PlanJSON:      json.RawMessage(`{"sensitive":true}`),
+		PlanJSONError: "capture error",
+		LastChecked:   time.Now(),
 	}
 
 	err := storage.Store("owner/repo", projectDrift)
@@ -60,6 +63,10 @@ func TestInMemoryStorage_StoreStripsPlanOutput(t *testing.T) {
 	Ok(t, err)
 	Equals(t, 1, len(results))
 	Equals(t, "", results[0].PlanOutput)
+	Equals(t, 0, len(results[0].PlanJSON))
+	Equals(t, "", results[0].PlanJSONError)
+	Equals(t, `{"sensitive":true}`, string(projectDrift.PlanJSON))
+	Equals(t, "capture error", projectDrift.PlanJSONError)
 }
 
 func TestInMemoryStorage_StoreOverwrite(t *testing.T) {

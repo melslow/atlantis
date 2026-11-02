@@ -4,6 +4,7 @@
 package models
 
 import (
+	"encoding/json"
 	"path"
 	"strconv"
 	"strings"
@@ -323,6 +324,10 @@ type ProjectDrift struct {
 	// since it is never marshaled directly; the API layer copies it onto
 	// DriftProjectAPI explicitly when the caller opts in via IncludePlanOutput.
 	PlanOutput string `json:"-"`
+	// PlanJSON and PlanJSONError are populated only for opted-in detect responses.
+	// Storage implementations must strip both fields before persisting.
+	PlanJSON      json.RawMessage `json:"-"`
+	PlanJSONError string          `json:"-"`
 	// LastChecked is when the drift was last detected.
 	LastChecked time.Time `json:"last_checked"`
 	// Error contains any error message if drift detection failed for this project.
@@ -391,6 +396,9 @@ type DriftDetectionRequest struct {
 	// (potentially large) Terraform plan text for each project. Defaults to
 	// false; set to true to receive plan_output on this detect response.
 	IncludePlanOutput bool `json:"include_plan_output,omitempty"`
+	// IncludePlanJSON requests the full, potentially sensitive terraform show
+	// JSON object for each successful plan. Defaults to false.
+	IncludePlanJSON bool `json:"include_plan_json,omitempty"`
 }
 
 // Validate checks the request and returns any validation errors.

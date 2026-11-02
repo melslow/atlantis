@@ -156,6 +156,7 @@ func TestProjectCommandContextBuilder_PropagatesAPIWorkflowFlags(t *testing.T) {
 		SuppressVCSStatus:     true,
 		SuppressJobOutput:     true,
 		SuppressApplyWebhooks: true,
+		IncludePlanJSON:       true,
 	}
 	apiResult := subject.BuildProjectContext(apiCtx, command.Plan, "", projCfg, []string{}, "repo", false, false, false, false, false, terraformClient)
 	assert.True(t, apiResult[0].API)
@@ -163,6 +164,7 @@ func TestProjectCommandContextBuilder_PropagatesAPIWorkflowFlags(t *testing.T) {
 	assert.True(t, apiResult[0].SuppressVCSStatus)
 	assert.True(t, apiResult[0].SuppressJobOutput)
 	assert.True(t, apiResult[0].SuppressApplyWebhooks)
+	assert.True(t, apiResult[0].IncludePlanJSON)
 
 	When(mockCommentBuilder.BuildPlanComment("env", "prod", "app", []string{})).ThenReturn("plan comment")
 	normalCtx := &command.Context{Log: logging.NewNoopLogger(t)}
@@ -172,4 +174,8 @@ func TestProjectCommandContextBuilder_PropagatesAPIWorkflowFlags(t *testing.T) {
 	assert.False(t, normalResult[0].SuppressVCSStatus)
 	assert.False(t, normalResult[0].SuppressJobOutput)
 	assert.False(t, normalResult[0].SuppressApplyWebhooks)
+	assert.False(t, normalResult[0].IncludePlanJSON)
+
+	applyResult := subject.BuildProjectContext(apiCtx, command.Apply, "", projCfg, []string{}, "repo", false, false, false, false, false, terraformClient)
+	assert.False(t, applyResult[0].IncludePlanJSON)
 }

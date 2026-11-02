@@ -338,6 +338,7 @@ func newProjectCommandContext(ctx *command.Context,
 		RunPolicyChecks:                 ctx.RunPolicyChecks,
 		SuppressVCSStatus:               ctx.SuppressVCSStatus,
 		SuppressJobOutput:               ctx.SuppressJobOutput,
+		IncludePlanJSON:                 ctx.IncludePlanJSON && cmd == command.Plan,
 		SuppressApplyWebhooks:           ctx.SuppressApplyWebhooks,
 		FailOnMissingDependencies:       ctx.FailOnMissingDependencies,
 	}

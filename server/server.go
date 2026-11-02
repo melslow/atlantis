@@ -814,6 +814,7 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 		},
 		PlanStepRunner:        runtime.NewPlanStepRunner(terraformClient, defaultTfDistribution, defaultTfVersion, commitStatusUpdater, terraformClient, planStore),
 		ShowStepRunner:        showStepRunner,
+		PlanJSONStepRunner:    runtime.NewPlanJSONStepRunner(terraformClient, defaultTfDistribution, defaultTfVersion),
 		PolicyCheckStepRunner: policyCheckStepRunner,
 		ApplyStepRunner: &runtime.ApplyStepRunner{
 			TerraformExecutor:     terraformClient,

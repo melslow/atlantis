@@ -34,6 +34,20 @@ type showStepRunner struct {
 }
 
 func (p *showStepRunner) Run(ctx command.ProjectContext, _ []string, path string, envs map[string]string) (string, error) {
+	output, err := p.show(ctx, path, envs)
+	if err != nil {
+		return "", err
+	}
+
+	showResultFile := filepath.Join(path, ctx.GetShowResultFileName())
+	if err := os.WriteFile(showResultFile, []byte(output), 0600); err != nil {
+		return "", fmt.Errorf("writing terraform show result: %w", err)
+	}
+
+	return output, nil
+}
+
+func (p *showStepRunner) show(ctx command.ProjectContext, path string, envs map[string]string) (string, error) {
 	tfDistribution := p.defaultTfDistribution
 	tfVersion := p.defaultTFVersion
 	if ctx.TerraformDistribution != nil {
@@ -44,7 +58,6 @@ func (p *showStepRunner) Run(ctx command.ProjectContext, _ []string, path string
 	}
 
 	planFile := GetPlanFilePath(ctx, path)
-	showResultFile := filepath.Join(path, ctx.GetShowResultFileName())
 
 	output, err := p.terraformExecutor.RunCommandWithVersion(
 		ctx,
@@ -58,10 +71,6 @@ func (p *showStepRunner) Run(ctx command.ProjectContext, _ []string, path string
 
 	if err != nil {
 		return "", fmt.Errorf("running terraform show: %w", err)
-	}
-
-	if err := os.WriteFile(showResultFile, []byte(output), 0600); err != nil {
-		return "", fmt.Errorf("writing terraform show result: %w", err)
 	}
 
 	return output, nil

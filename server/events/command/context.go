@@ -66,6 +66,9 @@ type Context struct {
 	// publishing raw command output to the public job stream.
 	SuppressJobOutput bool
 
+	// IncludePlanJSON requests transient JSON capture after successful project plans.
+	IncludePlanJSON bool
+
 	// SuppressApplyWebhooks prevents synthetic API workflows such as drift
 	// remediation from sending legacy event: apply webhooks.
 	SuppressApplyWebhooks bool
